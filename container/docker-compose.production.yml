@@ -1,7 +1,10 @@
 # SCG Gateway — Production Deployment
 #
 # A standard SCG container with all config files mounted from the host.
-# Edit the config files in ./configs/ and restart the gateway to apply.
+# The signed config dir ./nginx-demo-production/configs/ is mounted by default;
+# point the volume below at your own signed config dir for a real deployment.
+# Edit the mounted config files, re-sign them (see tproxy-host/resign.sh), and
+# restart the gateway to apply.
 #
 # Usage:
 #   docker compose -f container/docker-compose.production.yml up --build -d
@@ -9,7 +12,9 @@
 # Config files (edit these):
 #   configs/scg.defaults.json     - Platform defaults (crypto profiles, rules)
 #   configs/scg.user.json         - Deployment config (gateway ID, connections)
-#   configs/trust/                - CA certs, signing keys
+#   configs/trust/                - Trust anchor / config-signing public key
+#                                   only (the private signing key stays outside
+#                                   this repository)
 #
 # Logs:
 #   ./logs/                       - Gateway audit and operational logs
@@ -34,8 +39,9 @@ services:
       - net.ipv4.ip_forward=1
     volumes:
       # Configuration directory (contains scg.defaults.json, scg.user.json,
-      # their .sig files, and trust/ subdirectory with signing pubkey)
-      - ../../configs/:/etc/scg/config/:ro
+      # their .sig files, and trust/ subdirectory with the signing pubkey).
+      # Replace with your own signed config dir for a real deployment.
+      - ./nginx-demo-production/configs/:/etc/scg/config/:ro
       # TLS certificates and private keys (mount your own)
       - ./certs/:/etc/scg/certs/:ro
       - ./private/:/etc/scg/private/:ro

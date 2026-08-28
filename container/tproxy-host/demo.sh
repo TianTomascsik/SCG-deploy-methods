@@ -1,25 +1,32 @@
 #!/usr/bin/env bash
-# docker-demo.sh — Host-network demo control for Docker image tar workflow
+# demo.sh — Host-network demo control for the image-tar workflow
 #
 # Usage:
-#   ./docker-demo.sh load                # load local tar files into docker
-#   ./docker-demo.sh up                  # start nginx + gateway (HTTPS mode)
-#   ./docker-demo.sh start               # start/restart just the gateway
-#   ./docker-demo.sh stop                # stop just the gateway (HTTP mode)
-#   ./docker-demo.sh status              # show current mode
-#   ./docker-demo.sh logs                # follow gateway logs
-#   ./docker-demo.sh down                # remove both demo containers
-#   ./docker-demo.sh test-http           # verify plain HTTP mode
-#   ./docker-demo.sh test-https          # verify HTTPS mode
+#   ./demo.sh [--runtime docker|podman] <command>
+#
+# Commands:
+#   load        load local tar files into the container runtime
+#   up          start nginx + gateway (HTTPS mode)
+#   start       start/restart just the gateway
+#   stop        stop just the gateway (HTTP mode)
+#   status      show current mode
+#   logs        follow gateway logs
+#   down        remove both demo containers
+#   test-http   verify plain HTTP mode
+#   test-https  verify HTTPS mode
 #
 # Notes:
-# - Expects images/tars produced by: ./build.sh --runtime docker --with-demo
+# - Runtime auto-detect prefers podman, then docker (same as build.sh);
+#   override with --runtime or the CONTAINER_RUNTIME env var.
+# - With podman, run rootful (sudo) because host networking + NET_ADMIN are
+#   required.
+# - Expects images/tars produced by: ./build.sh --with-demo
+#   (add --runtime docker to build.sh for the Docker variant)
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-DOCKER="${DOCKER:-docker}"
 GATEWAY_IMAGE="${GATEWAY_IMAGE:-scg-gateway:latest}"
 NGINX_IMAGE="${NGINX_IMAGE:-scg-demo-nginx:latest}"
 GATEWAY_TAR="${GATEWAY_TAR:-./scg-gateway.tar}"
@@ -27,21 +34,55 @@ NGINX_TAR="${NGINX_TAR:-./scg-demo-nginx.tar}"
 GATEWAY_CONTAINER="scg_tproxy_gateway"
 NGINX_CONTAINER="scg_tproxy_nginx_4200"
 
-require_docker() {
-    if ! command -v "$DOCKER" >/dev/null 2>&1; then
-        echo "ERROR: docker is not installed." >&2
+RUNTIME_OVERRIDE="${CONTAINER_RUNTIME:-}"
+if [[ "${1:-}" = "--runtime" ]]; then
+    RUNTIME_OVERRIDE="${2:-}"
+    shift 2 || { echo "ERROR: --runtime needs an argument (docker|podman)." >&2; exit 1; }
+fi
+
+case "$RUNTIME_OVERRIDE" in
+    "")
+        if command -v podman &>/dev/null; then
+            RUNTIME=podman
+        elif command -v docker &>/dev/null; then
+            RUNTIME=docker
+        else
+            echo "ERROR: Neither podman nor docker found." >&2
+            exit 1
+        fi
+        ;;
+    docker|podman)
+        RUNTIME="$RUNTIME_OVERRIDE"
+        if ! command -v "$RUNTIME" &>/dev/null; then
+            echo "ERROR: Requested runtime '$RUNTIME' is not installed." >&2
+            exit 1
+        fi
+        ;;
+    *)
+        echo "ERROR: --runtime must be 'docker' or 'podman'." >&2
         exit 1
+        ;;
+esac
+
+# Podman needs --replace to reuse a leftover container name; rootful is
+# expected for host networking + NET_ADMIN.
+RUN_FLAGS=()
+if [[ "$RUNTIME" = "podman" ]]; then
+    RUN_FLAGS=(--replace)
+    if [[ "${EUID}" -ne 0 ]]; then
+        echo "WARNING: rootful podman is typically required for host networking + NET_ADMIN." >&2
+        echo "Try: sudo $0 ${1:-status}" >&2
     fi
-}
+fi
 
 container_state() {
     local name="$1"
-    "$DOCKER" inspect --format '{{.State.Status}}' "$name" 2>/dev/null || echo "not-created"
+    "$RUNTIME" inspect --format '{{.State.Status}}' "$name" 2>/dev/null || echo "not-created"
 }
 
 wait_nginx_internal() {
     for _ in $(seq 1 30); do
-        if "$DOCKER" exec "$NGINX_CONTAINER" wget -qO- http://127.0.0.1:4200/ >/dev/null 2>&1; then
+        if "$RUNTIME" exec "$NGINX_CONTAINER" wget -qO- http://127.0.0.1:4200/ >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
@@ -75,12 +116,13 @@ start_nginx_if_needed() {
     case "$state" in
         running)
             ;;
-        exited|created)
-            "$DOCKER" start "$NGINX_CONTAINER" >/dev/null
+        exited|configured|created)
+            "$RUNTIME" start "$NGINX_CONTAINER" >/dev/null
             ;;
         *)
-            "$DOCKER" run -d \
+            "$RUNTIME" run -d \
                 --name "$NGINX_CONTAINER" \
+                ${RUN_FLAGS[@]+"${RUN_FLAGS[@]}"} \
                 --network host \
                 "$NGINX_IMAGE" >/dev/null
             ;;
@@ -97,14 +139,15 @@ start_gateway() {
     state="$(container_state "$GATEWAY_CONTAINER")"
     case "$state" in
         running)
-            "$DOCKER" restart "$GATEWAY_CONTAINER" >/dev/null
+            "$RUNTIME" restart "$GATEWAY_CONTAINER" >/dev/null
             ;;
-        exited|created)
-            "$DOCKER" start "$GATEWAY_CONTAINER" >/dev/null
+        exited|configured|created)
+            "$RUNTIME" start "$GATEWAY_CONTAINER" >/dev/null
             ;;
         *)
-            "$DOCKER" run -d \
+            "$RUNTIME" run -d \
                 --name "$GATEWAY_CONTAINER" \
+                ${RUN_FLAGS[@]+"${RUN_FLAGS[@]}"} \
                 --network host \
                 --privileged \
                 --cap-add NET_ADMIN \
@@ -121,7 +164,7 @@ start_gateway() {
 
 stop_gateway() {
     if [[ "$(container_state "$GATEWAY_CONTAINER")" = "running" ]]; then
-        "$DOCKER" stop "$GATEWAY_CONTAINER" >/dev/null
+        "$RUNTIME" stop "$GATEWAY_CONTAINER" >/dev/null
     fi
 
     if ! wait_http; then
@@ -130,23 +173,15 @@ stop_gateway() {
     fi
 }
 
-require_docker
-
 case "${1:-status}" in
     load)
         [[ -f "$NGINX_TAR" ]] || { echo "ERROR: missing $NGINX_TAR" >&2; exit 1; }
         [[ -f "$GATEWAY_TAR" ]] || { echo "ERROR: missing $GATEWAY_TAR" >&2; exit 1; }
-        "$DOCKER" load -i "$NGINX_TAR"
-        "$DOCKER" load -i "$GATEWAY_TAR"
+        "$RUNTIME" load -i "$NGINX_TAR"
+        "$RUNTIME" load -i "$GATEWAY_TAR"
         ;;
 
-    up)
-        start_nginx_if_needed
-        start_gateway
-        echo "HTTPS mode active: https://localhost:4200"
-        ;;
-
-    start)
+    up|start)
         start_nginx_if_needed
         start_gateway
         echo "HTTPS mode active: https://localhost:4200"
@@ -161,6 +196,7 @@ case "${1:-status}" in
     status)
         NX="$(container_state "$NGINX_CONTAINER")"
         GW="$(container_state "$GATEWAY_CONTAINER")"
+        echo "Runtime: ${RUNTIME}"
         echo "NGINX:   ${NX}"
         echo "Gateway: ${GW}"
         if [[ "$GW" = "running" ]]; then
@@ -173,11 +209,11 @@ case "${1:-status}" in
         ;;
 
     logs)
-        "$DOCKER" logs -f "$GATEWAY_CONTAINER"
+        "$RUNTIME" logs -f "$GATEWAY_CONTAINER"
         ;;
 
     down)
-        "$DOCKER" rm -f "$GATEWAY_CONTAINER" "$NGINX_CONTAINER" >/dev/null 2>&1 || true
+        "$RUNTIME" rm -f "$GATEWAY_CONTAINER" "$NGINX_CONTAINER" >/dev/null 2>&1 || true
         echo "Removed demo containers."
         ;;
 
@@ -192,7 +228,7 @@ case "${1:-status}" in
         ;;
 
     *)
-        echo "Usage: $0 {load|up|start|stop|status|logs|down|test-http|test-https}" >&2
+        echo "Usage: $0 [--runtime docker|podman] {load|up|start|stop|status|logs|down|test-http|test-https}" >&2
         exit 1
         ;;
 esac

@@ -12,16 +12,22 @@ host-network TPROXY demo.
 | `container/` | Multi-stage Dockerfiles, compose topologies, and entrypoint scripts |
 | `container/tproxy-host/` | Self-contained host-network TPROXY gateway image with a **signed** lite config (its own [README](container/tproxy-host/README.md)) |
 | `container/nginx-demo-production/` | Production-style nginx demo behind the gateway, also signed-config based |
+| `container/bench/` | Legacy benchmark topologies, kept as reference (its own [README](container/bench/README.md)) |
 
 ### Compose topologies (`container/docker-compose.*.yml`)
 
 | Topology | What it models |
 |---|---|
-| `2c` | producer → gateway → consumer (two containers + gateway) |
-| `3c` | producer → encrypt gateway → decrypt gateway → consumer |
-| `gw2c` / `gw3c` | the same, with the gateway(s) in dedicated containers |
-| `proxy` | transparent-proxy interception path |
-| `nginx-demo` / `nginx-switchable` / `nginx-tproxy` / `production` | browser-facing nginx demos behind the gateway |
+| `proxy` | explicit proxy hop: producer → gateway (TLS-wrap) → consumer |
+| `nginx-demo` / `nginx-switchable` / `nginx-tproxy` | browser-facing nginx demos behind the gateway |
+| `production` | bare gateway, all config host-mounted — no nginx |
+| `bench/2c` | producer → gateway → consumer (two containers + gateway) |
+| `bench/3c` | producer → encrypt gateway → decrypt gateway → consumer |
+| `bench/gw2c` / `bench/gw3c` | the same, with the gateway(s) in dedicated containers |
+
+Smoke tests: `container/test_nginx_demo.sh` builds, starts, and verifies the
+`nginx-demo` topology end to end; `container/test_nginx_tproxy.sh` does the
+same for the 4-container `nginx-tproxy` topology.
 
 ## Prerequisites & build context
 
@@ -42,12 +48,14 @@ cd parent/
 docker build -f SCG-deploy-methods/container/Dockerfile .
 ```
 
-> **Note — bench topologies:** the `2c`/`3c`/`gw2c`/`gw3c` benchmark
-> topologies additionally expect a legacy `SCG-Interface-benchmarks/` sibling
-> that provides the `bench_*` micro-benchmark binaries. That repository is not
-> published; these topologies are kept for reference and are not expected to
-> build outside the original environment. The gateway image, the TPROXY demo,
-> and the nginx demos build without it.
+> **Note — bench topologies:** the benchmark topologies under
+> [`container/bench/`](container/bench/) (`2c`/`3c`/`gw2c`/`gw3c`), and the
+> `proxy` topology that shares their image, additionally expect a legacy
+> `SCG-Interface-benchmarks/` sibling that provides the `bench_*`
+> micro-benchmark binaries. That repository is not published; these topologies
+> are kept for reference and are not expected to build outside the original
+> environment. The gateway image, the TPROXY demo, and the nginx demos build
+> without it.
 
 ## Security notes
 

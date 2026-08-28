@@ -1,15 +1,17 @@
-# 3-Container Transparent Proxy Gateway
+# 3-Container Proxy Gateway
 #
 # Container 1: producer   — sends plain TCP/UDP traffic
-# Container 2: gateway    — transparent TLS/kTLS encrypt/decrypt proxy
+# Container 2: gateway    — TLS/kTLS encrypt/decrypt proxy (explicit hop)
 # Container 3: consumer   — receives traffic (plain or TLS depending on test)
 #
 # Data flows:
 #   Encrypt test:  producer --[TCP/UDP]--> gateway (encrypt→TLS) --[TLS]--> consumer
 #   Decrypt test:  producer --[TLS]------> gateway (decrypt→TCP) --[TCP]--> consumer
 #
-# The gateway container sets up iptables TPROXY rules to transparently intercept
-# traffic without requiring producer/consumer reconfiguration.
+# The gateway is an explicit proxy hop: the producer sends to the gateway's
+# address, which TLS-wraps the traffic toward the consumer (the generated
+# config sets transparent = false and no iptables rules are installed). For
+# real transparent interception, see docker-compose.nginx-tproxy.yml.
 #
 # Usage:
 #   docker compose -f container/docker-compose.proxy.yml up --build
@@ -19,7 +21,7 @@
 #   PIPE_MODE        - tls or ktls (default: tls)
 #   MEASURE_LATENCY  - 1 to enable (default: 0)
 #   RUN_ID           - Run identifier (default: auto-generated)
-#   PRODUCER_TARGET  - host:port the producer sends to (default: consumer:9000)
+#   PRODUCER_TARGET_HOST - host the producer sends to (default: 172.30.0.20, the gateway)
 #   PRODUCER_PROTO   - tcp or udp (default: tcp)
 #   CONSUMER_PORT    - port the consumer listens on (default: 9000)
 
@@ -27,7 +29,7 @@ services:
   consumer:
     build:
       context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_proxy_endpoint.sh
     container_name: proxy_consumer
     networks:
@@ -47,7 +49,7 @@ services:
   gateway:
     build:
       context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_proxy.sh
     container_name: proxy_gateway
     depends_on:
@@ -77,7 +79,7 @@ services:
   producer:
     build:
       context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_proxy_producer.sh
     container_name: proxy_producer
     depends_on:

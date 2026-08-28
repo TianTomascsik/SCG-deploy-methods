@@ -12,15 +12,23 @@ Browser/app ──https://localhost:4200──→ [OUTPUT REDIRECT 4200→4201] 
 ```
 
 - Local clients connect to `https://localhost:4200`
-- iptables transparently redirects local traffic for `127.0.0.1:4200` to the gateway on port `4201`
-- Gateway terminates TLS and forwards plain HTTP to `127.0.0.1:4200`
+- iptables transparently redirects local traffic for `127.0.0.1:4200` to the
+  gateway on port `4201` (intercept mode `egress_redirect`,
+  `match_dst: ["127.0.0.1"]`, `match_dports: "4200"`)
+- The gateway listens on `[::]:4201` (dual-stack, so traffic a browser sends
+  to `::1` is caught by the mirrored IPv6 redirect too), terminates TLS, and
+  forwards plain HTTP to `127.0.0.1:4200`
 - Your application continues listening on port 4200 as before
+
+The shipped `configs/scg.user.json` declares exactly this flow as connection
+`secure-4200`.
 
 Recommended deployment default:
 
 - keep the editable config on the host
 - mount that folder into the container at `/etc/scg/config`
-- run the gateway against that mounted config directory instead of relying on the baked-in copy
+- run the gateway against that mounted config directory instead of relying on
+  the baked-in copy
 
 ## Browser Demo With Sample NGINX
 
@@ -60,9 +68,7 @@ Or use the helper:
 ./gateway.sh status
 ```
 
-## Quick Start
-
-### 1. Build the image
+## Building the Image
 
 ```bash
 ./build.sh
@@ -70,120 +76,65 @@ Or use the helper:
 
 This produces `scg-gateway.tar` (~40 MB).
 
-To also package the sample host-network nginx demo for Podman:
+| Variant | Command |
+|---|---|
+| Also package the sample nginx demo image | `./build.sh --with-demo` |
+| Force Docker as the build/export runtime | `./build.sh --runtime docker` |
+| Build only, skip the tar export | `./build.sh --no-export` |
 
-```bash
-./build.sh --with-demo
-```
-
-That additionally produces `scg-demo-nginx.tar`.
-
-To force Docker as the build/export runtime:
-
-```bash
-./build.sh --runtime docker --with-demo
-```
+`build.sh` auto-detects the container runtime (podman preferred, then
+docker). Podman exports a true OCI archive; a Docker-built tar is still
+loadable by either runtime, just in docker-archive format.
 
 ## Independent Gateway Deployment From OCI Image Tar
 
 Use this path when you want to deploy only the SCG gateway image on a target
 host, without the sample demo containers from this repo.
 
+The commands below write `<runtime>` where either `podman` or `docker` works —
+the invocations are identical. With podman, run the containers rootful
+(`sudo`) because host networking and `NET_ADMIN` are required.
+
 ### 1. Build the gateway tar
 
-Prefer Podman if you specifically want an OCI archive:
-
 ```bash
-./build.sh --runtime podman
+./build.sh                       # podman preferred: OCI archive
+./build.sh --runtime docker      # docker-archive instead
 ```
 
-This creates:
-
-```text
-scg-gateway.tar
-```
-
-If you build with Docker instead:
-
-```bash
-./build.sh --runtime docker
-```
-
-the resulting tar is still loadable, but it will be a Docker archive rather
-than a Podman-generated OCI archive.
+This creates `scg-gateway.tar`.
 
 ### 2. Copy the tar to the target machine
 
-Transfer:
-
-```text
-scg-gateway.tar
-```
-
-to the host where you want the gateway to run.
+Transfer `scg-gateway.tar` to the host where you want the gateway to run.
 
 ### 3. Load the tar on the target host
 
-With Podman:
-
 ```bash
-podman load -i scg-gateway.tar
-```
-
-With Docker:
-
-```bash
-docker load -i scg-gateway.tar
+<runtime> load -i scg-gateway.tar
 ```
 
 ### 4. Create the mounted host config directory
 
-This is the recommended default deployment model.
+This is the recommended default deployment model. Use a host path such as
+`/opt/scg/config` and mount it into the container as `/etc/scg/config`.
 
-Use a host path such as:
-
-```text
-/opt/scg/config
-```
-
-and mount it into the container as:
-
-```text
-/etc/scg/config
-```
-
-If you still have this repo available, seed the host config directory from:
-
-```text
-SCG-deploy-methods/container/tproxy-host/configs/
-```
-
-For example:
+If you still have this repo available, seed the host config directory from
+`SCG-deploy-methods/container/tproxy-host/configs/`:
 
 ```bash
 mkdir -p /opt/scg/config
 cp -a configs/. /opt/scg/config/
 ```
 
-If you only have the image tar on the target machine, you can extract the
-baked-in config from the loaded image first.
-
-With Podman:
+If you only have the image tar on the target machine, extract the baked-in
+config from the loaded image instead:
 
 ```bash
 mkdir -p /opt/scg/config
-podman create --name scg-config-seed scg-gateway:latest
-podman cp scg-config-seed:/etc/scg/config/. /opt/scg/config/
-podman rm scg-config-seed
-```
-
-With Docker:
-
-```bash
-mkdir -p /opt/scg/config
-docker create --name scg-config-seed scg-gateway:latest
-docker cp scg-config-seed:/etc/scg/config/. /opt/scg/config/
-docker rm scg-config-seed
+<runtime> create --name scg-config-seed scg-gateway:latest
+<runtime> cp scg-config-seed:/etc/scg/config/. /opt/scg/config/
+<runtime> rm scg-config-seed
 ```
 
 ### 5. Prepare the target host
@@ -192,35 +143,20 @@ Before starting the gateway container, make sure:
 
 - your real backend application is already listening on the host
 - the backend address/port matches `/opt/scg/config/scg.user.json`
-- for the default config, that means the backend serves plain traffic on `127.0.0.1:4200`
+- for the default config, that means the backend serves plain traffic on
+  `127.0.0.1:4200`
 
 If your backend uses a different port or host, update the files in
-`/opt/scg/config`, re-sign them, and then reload the gateway.
+`/opt/scg/config`, re-sign them, and then reload the gateway (see steps 8 and
+"Changing the Intercepted Port" below).
 
 ### 6. Run only the gateway container
 
-The commands below make the mounted host config folder the default and also
-enable file watching for edit-on-demand updates.
-
-With Podman:
+The command below makes the mounted host config folder the default and also
+enables file watching for edit-on-demand updates:
 
 ```bash
-podman run -d \
-  --name scg-gateway \
-  --network host \
-  --privileged \
-  --cap-add NET_ADMIN \
-  --cap-add NET_RAW \
-  --restart unless-stopped \
-  -v /opt/scg/config:/etc/scg/config:ro \
-  scg-gateway:latest \
-  --config-dir /etc/scg/config --log-stdout --watch
-```
-
-With Docker:
-
-```bash
-docker run -d \
+<runtime> run -d \
   --name scg-gateway \
   --network host \
   --privileged \
@@ -254,137 +190,71 @@ return your backend response through TLS.
 
 ### 8. Edit the config on demand
 
-Edit the host-side files in:
-
-```text
-/opt/scg/config
-```
-
-The most common file to change is:
-
-```text
-/opt/scg/config/scg.user.json
-```
+Edit the host-side files in `/opt/scg/config`. The most common file to change
+is `/opt/scg/config/scg.user.json`.
 
 Important:
 
 - `scg.user.json` and `scg.defaults.json` are signature-checked
-- after editing them, re-sign with `./resign.sh --key /path/OUTSIDE/repo/signing.key.pem` (add `--config-dir /opt/scg/config` for a mounted config)
-- use `./resign.sh --key ... --validate` to also verify the signatures after signing
-- the private signing key must never live inside this repository or the image; generate one with `resign.sh --help`'s keygen snippet
-- if you do not want the signing key on the target host, re-sign on a trusted admin machine and copy the updated signed files into `/opt/scg/config`
+- after editing them, re-sign with
+  `./resign.sh --key /path/OUTSIDE/repo/signing.key.pem --config-dir /opt/scg/config`
+- use `./resign.sh --key ... --validate` to also verify the signatures after
+  signing
+- the private signing key must never live inside this repository or the image;
+  generate one with `resign.sh --help`'s keygen snippet
+- if you do not want the signing key on the target host, re-sign on a trusted
+  admin machine and copy the updated signed files into `/opt/scg/config`
 
 With `--watch`, new config is picked up automatically for new connections.
 Without `--watch`, send `SIGHUP` to reload:
 
-With Podman:
-
 ```bash
-podman kill --signal HUP scg-gateway
-```
-
-With Docker:
-
-```bash
-docker kill --signal HUP scg-gateway
+<runtime> kill --signal HUP scg-gateway
 ```
 
 Existing connections are not interrupted; new connections use the new config.
 
 ### 9. Operate the gateway
 
-Show logs:
-
 ```bash
-podman logs -f scg-gateway
+<runtime> logs -f scg-gateway    # follow logs
+<runtime> stop scg-gateway       # stop
+<runtime> rm scg-gateway         # remove
 ```
 
-or:
+### Mounted config is the default pattern
 
-```bash
-docker logs -f scg-gateway
-```
-
-Stop it:
-
-```bash
-podman stop scg-gateway
-```
-
-or:
-
-```bash
-docker stop scg-gateway
-```
-
-Remove it:
-
-```bash
-podman rm scg-gateway
-```
-
-or:
-
-```bash
-docker rm scg-gateway
-```
-
-### 10. Mounted config is the default pattern
-
-The mounted folder approach above is now the recommended default deployment
+The mounted folder approach above is the recommended default deployment
 pattern. The baked-in `/etc/scg/config` inside the image is mainly useful as:
 
 - a seed source for `/opt/scg/config`
 - a fallback for very static deployments
 - a way to bootstrap a fresh host before switching to a mounted config directory
 
-### Demo workflows
+## Running the Packaged Demo From Tar
 
-### 3a. Run the full sample demo from OCI tar with Podman
-
-Use the packaged demo images plus the helper script:
-
-```bash
-sudo ./podman-demo.sh load
-sudo ./podman-demo.sh up
-```
-
-Then:
+The `demo.sh` helper drives the packaged nginx + gateway demo from the tar
+files produced by `./build.sh --with-demo`. It auto-detects the runtime
+(podman preferred, then docker); override with `--runtime docker|podman`.
+Prefix the commands with `sudo` when using podman.
 
 ```bash
-sudo ./podman-demo.sh stop     # switch to plain HTTP
+./demo.sh load       # load scg-gateway.tar + scg-demo-nginx.tar
+./demo.sh up         # start nginx + gateway (HTTPS mode)
+
+./demo.sh stop       # switch to plain HTTP
 curl http://localhost:4200/
 
-sudo ./podman-demo.sh start    # switch TLS interception back on
+./demo.sh start      # switch TLS interception back on
 curl -k https://localhost:4200/
+
+./demo.sh status     # show current mode
+./demo.sh down       # remove both demo containers
 ```
 
 The helper keeps `nginx` on the host network and toggles only the gateway
 container, so you can verify the fallback between direct HTTP and intercepted
 HTTPS on the same port.
-
-### 3b. Run the full sample demo from tar with Docker
-
-Build tar images with Docker:
-
-```bash
-./build.sh --runtime docker --with-demo
-```
-
-Load and run them with the Docker helper:
-
-```bash
-./docker-demo.sh load
-./docker-demo.sh up
-```
-
-Then toggle between modes:
-
-```bash
-./docker-demo.sh stop      # plain HTTP on http://localhost:4200
-./docker-demo.sh start     # HTTPS interception on https://localhost:4200
-./docker-demo.sh status
-```
 
 ## Changing the Intercepted Port
 
@@ -393,7 +263,8 @@ To protect a different port (e.g., **8080** instead of 4200):
 1. Edit your mounted host config, for example `/opt/scg/config/scg.user.json`:
    - Change `ingress.endpoint.port` to your new gateway TLS port (e.g., 8081)
    - Change `ingress.intercept.match_dports` to `"8080"`
-   - Keep `ingress.intercept.match_dst` aligned with the local backend address (for the default browser flow this is `["127.0.0.1"]`)
+   - Keep `ingress.intercept.match_dst` aligned with the local backend address
+     (for the default browser flow this is `["127.0.0.1"]`)
    - Change `paths[0].egress.endpoint.port` to `8080`
 
 2. Re-sign the config:
@@ -410,28 +281,21 @@ To protect a different port (e.g., **8080** instead of 4200):
 
 3. Let the running gateway pick up the change:
    ```bash
-   docker kill --signal HUP scg-gateway
+   <runtime> kill --signal HUP scg-gateway
    ```
 
-   Or, if you started it with `--watch`, just wait a couple of seconds for auto-reload.
+   Or, if you started it with `--watch`, just wait a couple of seconds for
+   auto-reload.
 
-If you prefer a static baked-in config instead, you can still rebuild the image tar after editing and signing.
-
-Mount the config directory at runtime like this:
-
-```bash
-podman run -d \
-  --name scg-gateway \
-  --network host \
-  --privileged \
-  -v /path/to/my-configs:/etc/scg/config:ro \
-  scg-gateway:latest \
-  --config-dir /etc/scg/config --log-stdout --watch
-```
+If you prefer a static baked-in config instead, you can still rebuild the
+image tar after editing and signing, or mount any signed config directory at
+runtime via `-v /path/to/my-configs:/etc/scg/config:ro`.
 
 ## Adding Multiple Services
 
-Add more connections to `configs/scg.user.json`:
+Add more connections to `configs/scg.user.json`. The first entry below is the
+shipped default; the second adds an 8080 service behind a TLS listener on
+8081:
 
 ```json
 {
@@ -439,7 +303,7 @@ Add more connections to `configs/scg.user.json`:
     {
       "connection_id": "secure-4200",
       "ingress": {
-        "endpoint": { "ip": "0.0.0.0", "port": 4201 },
+        "endpoint": { "ip": "::", "port": 4201 },
         "intercept": {
           "mode": "egress_redirect",
           "match_dports": "4200",
@@ -451,7 +315,7 @@ Add more connections to `configs/scg.user.json`:
     {
       "connection_id": "secure-8080",
       "ingress": {
-        "endpoint": { "ip": "0.0.0.0", "port": 8081 },
+        "endpoint": { "ip": "::", "port": 8081 },
         "intercept": {
           "mode": "egress_redirect",
           "match_dports": "8080",
@@ -464,7 +328,10 @@ Add more connections to `configs/scg.user.json`:
 }
 ```
 
-Each connection independently intercepts its configured port.
+Each connection independently intercepts its configured port. (The snippet
+shows only the fields that vary; keep the other fields of the shipped
+`secure-4200` connection — `transport`, `protection`, `traffic_class` — in
+each real entry.)
 
 ## Config Structure
 
@@ -487,7 +354,11 @@ key is kept outside the image and outside this repository, for re-signing only.
 The SCG gateway reads the `intercept` block from each connection and
 **automatically installs/removes iptables rules** at startup/shutdown:
 
-- **Startup**: creates `SCG_ENCRYPT` chain in `nat` table, adds REDIRECT rules
+- **Startup**: creates the `SCG_ENCRYPT` chain in the `nat` table and adds
+  REDIRECT rules — for the default `egress_redirect` mode these hang off the
+  `OUTPUT` chain (locally generated traffic), with the gateway's own UID
+  exempted to avoid redirect loops and a best-effort `ip6tables` mirror for
+  `::1`
 - **Shutdown** (SIGTERM): flushes the chain and removes routing policy
 - **Forced kill**: next startup idempotently cleans up stale rules
 

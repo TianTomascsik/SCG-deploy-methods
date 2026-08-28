@@ -1,6 +1,8 @@
 #!/bin/bash
-# Entrypoint for the transparent proxy gateway container.
-# Sets up iptables TPROXY rules and launches the gateway binary with TOML config.
+# Entrypoint for the proxy gateway container.
+# Generates a TOML config and launches the gateway binary as an explicit proxy
+# hop (transparent = false; no iptables rules are installed — see
+# docker-compose.nginx-tproxy.yml for real transparent interception).
 set -e
 
 PIPE_MODE="${PIPE_MODE:-tls}"
@@ -65,19 +67,8 @@ echo "Generated config:"
 cat "$CONFIG_PATH"
 echo ""
 
-# ─── Setup TPROXY iptables rules (optional, for transparent mode) ──────────────
-# Uncomment these for fully transparent TPROXY mode:
-#
-# ip rule add fwmark 0x1 lookup 100 2>/dev/null || true
-# ip route add local 0.0.0.0/0 dev lo table 100 2>/dev/null || true
-#
-# if [ "$PROTO" = "tcp" ]; then
-#     iptables -t mangle -A PREROUTING -p tcp --dport "$LISTEN_PORT" \
-#         -j TPROXY --tproxy-mark 0x1/0x1 --on-port "$LISTEN_PORT" 2>/dev/null || true
-# elif [ "$PROTO" = "udp" ]; then
-#     iptables -t mangle -A PREROUTING -p udp --dport "$LISTEN_PORT" \
-#         -j TPROXY --tproxy-mark 0x1/0x1 --on-port "$LISTEN_PORT" 2>/dev/null || true
-# fi
+# Transparent TPROXY interception is not implemented in this topology; the
+# producer addresses the gateway directly.
 
 # ─── Wait for consumer to be reachable ──────────────────────────────────────────
 echo "Waiting for consumer at ${CONSUMER_HOST}:${CONSUMER_PORT}..."

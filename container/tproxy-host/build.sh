@@ -123,16 +123,17 @@ if [ "$NO_EXPORT" = false ]; then
 
     echo ""
     echo "Load on target machine with:"
-    echo "  podman load -i $TAR_NAME"
+    echo "  $RUNTIME load -i $TAR_NAME"
     if [ "$WITH_DEMO" = true ]; then
-        echo "  podman load -i $DEMO_TAR_NAME"
+        echo "  $RUNTIME load -i $DEMO_TAR_NAME"
         echo ""
         echo "Then run the host demo with:"
         if [ "$RUNTIME" = "podman" ]; then
-            echo "  sudo ./podman-demo.sh up"
+            echo "  sudo ./demo.sh load"
+            echo "  sudo ./demo.sh up"
         else
-            echo "  ./docker-demo.sh load"
-            echo "  ./docker-demo.sh up"
+            echo "  ./demo.sh load"
+            echo "  ./demo.sh up"
         fi
     fi
 fi

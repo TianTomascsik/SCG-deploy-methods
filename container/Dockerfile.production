@@ -1,7 +1,8 @@
 # Production SCG Gateway Container
 # All configuration is externalized via volume mounts.
 #
-# Build context: Janus root (needs SCG/ and ale-frame/).
+# Build context: the parent directory that contains the sibling checkouts
+# (SCG/, ale-frame/, SCG-deploy-methods/).
 #
 # Mount points:
 #   /etc/scg/config/    - scg.defaults.json, scg.user.json, *.sig files
@@ -28,7 +29,7 @@ COPY ale-frame/ ./ale-frame/
 WORKDIR /build/SCG
 # --features dev: the entrypoint scripts generate an unsigned single-file
 # --config at runtime, which a default gateway build rejects (signed
-# --config-dir only; SCG-TRA #87). A hardened deployment should instead build
+# --config-dir only). A hardened deployment should instead build
 # without `dev` and mount a signed --config-dir (see tproxy-host/ and
 # nginx-demo-production/ for signed config assets + resign.sh).
 RUN cargo build --release -p gateway --features dev

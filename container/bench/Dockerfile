@@ -1,5 +1,6 @@
 # Multi-stage build for the benchmark/proxy topology containers
-# (docker-compose.{2c,3c,gw2c,gw3c,proxy}.yml).
+# (docker-compose.{2c,3c,gw2c,gw3c}.yml in this directory, plus
+# ../docker-compose.proxy.yml).
 #
 # Build context: the parent directory of this repo, so the
 # sibling source repos are available:
@@ -25,11 +26,11 @@ COPY SCG-Interface-benchmarks/ ./SCG-Interface-benchmarks/
 # gateway (from the SCG workspace)
 # --features dev: the entrypoint scripts generate an unsigned single-file
 # --config at runtime, which a default (production) gateway build rejects
-# (signed --config-dir only; SCG-TRA #87). A real production image should build
+# (signed --config-dir only). A real production image should build
 # without `dev` and mount a signed --config-dir instead.
 RUN cargo build --release --manifest-path SCG/Cargo.toml -p gateway --features dev
 
-# bench_* micro-benchmarks (relocated to the SCG-Interface-benchmarks workspace)
+# bench_* micro-benchmarks from the SCG-Interface-benchmarks workspace
 RUN cargo build --release --manifest-path SCG-Interface-benchmarks/Cargo.toml \
     -p bench_tcp -p bench_udp -p bench_uds -p bench_shm -p bench_ktls \
     -p bench_receiver -p bench_gateway
@@ -57,11 +58,11 @@ COPY --from=builder /build/SCG-Interface-benchmarks/target/release/bench_gateway
 COPY --from=builder /build/SCG/target/release/gateway /usr/local/bin/
 
 # Copy entrypoint scripts (context is the parent directory of this repo)
-COPY SCG-deploy-methods/container/entrypoint_receiver.sh /usr/local/bin/
-COPY SCG-deploy-methods/container/entrypoint_benchmark.sh /usr/local/bin/
-COPY SCG-deploy-methods/container/entrypoint_consumer.sh /usr/local/bin/
-COPY SCG-deploy-methods/container/entrypoint_gateway.sh /usr/local/bin/
-COPY SCG-deploy-methods/container/entrypoint_downstream.sh /usr/local/bin/
+COPY SCG-deploy-methods/container/bench/entrypoint_receiver.sh /usr/local/bin/
+COPY SCG-deploy-methods/container/bench/entrypoint_benchmark.sh /usr/local/bin/
+COPY SCG-deploy-methods/container/bench/entrypoint_consumer.sh /usr/local/bin/
+COPY SCG-deploy-methods/container/bench/entrypoint_gateway.sh /usr/local/bin/
+COPY SCG-deploy-methods/container/bench/entrypoint_downstream.sh /usr/local/bin/
 COPY SCG-deploy-methods/container/entrypoint_proxy.sh /usr/local/bin/
 COPY SCG-deploy-methods/container/entrypoint_proxy_producer.sh /usr/local/bin/
 COPY SCG-deploy-methods/container/entrypoint_proxy_endpoint.sh /usr/local/bin/

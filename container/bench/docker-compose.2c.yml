@@ -3,7 +3,7 @@
 # Container 2: Receiver - accepts TLS connections, measures latency
 #
 # Usage:
-#   docker compose -f container/docker-compose.2c.yml up --build
+#   docker compose -f container/bench/docker-compose.2c.yml up --build
 #
 # Environment variables (set in .env or override):
 #   BENCHMARKS     - Space-separated list (default: "tcp_raw udp_raw")
@@ -15,8 +15,8 @@
 services:
   receiver:
     build:
-      context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_receiver.sh
     container_name: bench_receiver
     networks:
@@ -35,8 +35,8 @@ services:
 
   benchmark:
     build:
-      context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_benchmark.sh
     container_name: bench_runner
     depends_on:

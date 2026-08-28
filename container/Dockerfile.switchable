@@ -1,7 +1,8 @@
 # Dockerfile for SCG switchable demo (HTTP/HTTPS toggle)
 # Builds the gateway binary and includes the Python control server.
 #
-# Build context must be the Janus root directory.
+# Build context must be the parent directory that contains the sibling
+# checkouts (SCG/, ale-frame/, SCG-deploy-methods/).
 
 # Stage 1: Build the gateway binary
 FROM rust:1.89-bookworm AS builder
@@ -20,7 +21,7 @@ COPY ale-frame/ ./ale-frame/
 WORKDIR /build/SCG
 # --features dev: the entrypoint generates an unsigned single-file --config at
 # runtime, which a default (production) gateway build rejects (signed
-# --config-dir only; SCG-TRA #87).
+# --config-dir only).
 RUN cargo build --release -p gateway --features dev
 
 # Stage 2: Runtime image

@@ -9,22 +9,23 @@
 # SHM uses a shareable IPC namespace so both containers access the same POSIX SHM.
 #
 # Usage:
-#   PROTOCOL=tcp VARIANT=raw docker compose -f container/docker-compose.3c.yml up --build
-#   PROTOCOL=uds VARIANT=raw docker compose -f container/docker-compose.3c.yml up --build
-#   PROTOCOL=shm VARIANT=ring docker compose -f container/docker-compose.3c.yml up --build
+#   PROTOCOL=tcp VARIANT=raw docker compose -f container/bench/docker-compose.3c.yml up --build
+#   PROTOCOL=uds VARIANT=raw docker compose -f container/bench/docker-compose.3c.yml up --build
+#   PROTOCOL=shm VARIANT=ring docker compose -f container/bench/docker-compose.3c.yml up --build
 #
 # Environment variables:
 #   PROTOCOL        - tcp, udp, uds, or shm (default: tcp)
 #   VARIANT         - raw, structured, ring, seg, seg_optimized (default: raw)
-#   PIPE_MODE       - none, tls, or ktls (default: tls)\n#                     none = receive & drop (no pipe to receiver)
+#   PIPE_MODE       - none, tls, or ktls (default: tls)
+#                     none = receive & drop (no pipe to receiver)
 #   MEASURE_LATENCY - 1 to enable (default: 0)
 #   TCP_CORK        - 1 to enable TCP_CORK on pipe sockets (default: 0)
 
 services:
   receiver:
     build:
-      context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_receiver.sh
     container_name: bench_3c_receiver
     networks:
@@ -43,8 +44,8 @@ services:
 
   consumer:
     build:
-      context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_consumer.sh
     container_name: bench_3c_consumer
     depends_on:
@@ -76,8 +77,8 @@ services:
 
   producer:
     build:
-      context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     container_name: bench_3c_producer
     depends_on:
       - consumer

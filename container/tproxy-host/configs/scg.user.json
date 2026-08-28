@@ -7,8 +7,8 @@
   "apps": [],
   "connections": [
     {
-      "connection_id": "secure-8085",
-      "description": "TLS termination for HTTP service on port 8085. External clients connect via HTTPS, gateway intercepts port 8085 and terminates TLS before forwarding plain HTTP to the backend.",
+      "connection_id": "secure-4200",
+      "description": "Local-egress TLS interception for the HTTP service on port 4200. Local clients connect to https://localhost:4200; iptables redirects that traffic to the gateway listening on port 4201, which terminates TLS and forwards plain HTTP to the backend on 127.0.0.1:4200.",
       "traffic_class": "normal",
       "transparent": false,
       "application_protocol": "raw_tcp",
@@ -24,11 +24,12 @@
       "ingress": {
         "endpoint": {
           "ip": "::",
-          "port": 8086
+          "port": 4201
         },
         "intercept": {
-          "mode": "ingress_redirect",
-          "match_dports": "8085"
+          "mode": "egress_redirect",
+          "match_dports": "4200",
+          "match_dst": ["127.0.0.1"]
         }
       },
       "paths": [
@@ -38,7 +39,7 @@
           "egress": {
             "endpoint": {
               "host": "127.0.0.1",
-              "port": 8085
+              "port": 4200
             }
           }
         }

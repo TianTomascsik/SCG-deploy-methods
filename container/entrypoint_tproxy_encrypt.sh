@@ -25,12 +25,14 @@ sysctl -w net.core.rmem_max=16777216 >/dev/null 2>&1 || true
 sysctl -w net.core.wmem_max=16777216 >/dev/null 2>&1 || true
 
 # ─── Setup iptables REDIRECT ──────────────────────────────────────────────────
-# Intercept forwarded TCP traffic destined for NGINX and redirect to our
-# local gateway listen port. This is the "transparent proxy" magic —
-# the client's connection to nginx:80 gets silently redirected to gateway:3128.
+# Intercept forwarded TCP traffic destined for NGINX and redirect it to the
+# local gateway listen port: the client's connection to nginx:80 is redirected
+# to the gateway's listen port.
 echo "Setting up iptables rules..."
 
-# Flush any existing rules in our chain
+# Flush the entire built-in nat PREROUTING chain — this wipes any pre-existing
+# rules there, which is acceptable only because this throwaway demo container
+# owns its network namespace.
 iptables -t nat -F PREROUTING 2>/dev/null || true
 
 # Redirect forwarded traffic destined for nginx:80 to our local listen port

@@ -6,8 +6,8 @@
 # measuring decrypt throughput and latency.
 #
 # Usage:
-#   PIPE_MODE=tls docker compose -f container/docker-compose.gw2c.yml up --build
-#   PIPE_MODE=ktls docker compose -f container/docker-compose.gw2c.yml up --build
+#   PIPE_MODE=tls docker compose -f container/bench/docker-compose.gw2c.yml up --build
+#   PIPE_MODE=ktls docker compose -f container/bench/docker-compose.gw2c.yml up --build
 #
 # Environment variables:
 #   BENCHMARKS      - Space-separated list (default: "tcp_raw udp_raw")
@@ -19,8 +19,8 @@
 services:
   gateway:
     build:
-      context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_gateway.sh
     container_name: bench_gw2c_gateway
     networks:
@@ -40,8 +40,8 @@ services:
 
   benchmark:
     build:
-      context: ../..
-      dockerfile: SCG-deploy-methods/container/Dockerfile
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/bench/Dockerfile
     entrypoint: /usr/local/bin/entrypoint_benchmark.sh
     container_name: bench_gw2c_runner
     depends_on:
