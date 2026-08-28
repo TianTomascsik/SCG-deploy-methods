@@ -1,0 +1,109 @@
+# 3-Container Transparent Proxy Gateway
+#
+# Container 1: producer   — sends plain TCP/UDP traffic
+# Container 2: gateway    — transparent TLS/kTLS encrypt/decrypt proxy
+# Container 3: consumer   — receives traffic (plain or TLS depending on test)
+#
+# Data flows:
+#   Encrypt test:  producer --[TCP/UDP]--> gateway (encrypt→TLS) --[TLS]--> consumer
+#   Decrypt test:  producer --[TLS]------> gateway (decrypt→TCP) --[TCP]--> consumer
+#
+# The gateway container sets up iptables TPROXY rules to transparently intercept
+# traffic without requiring producer/consumer reconfiguration.
+#
+# Usage:
+#   docker compose -f container/docker-compose.proxy.yml up --build
+#
+# Environment variables:
+#   GATEWAY_CONFIG   - Path to TOML config inside container (default: /etc/gateway/gateway.toml)
+#   PIPE_MODE        - tls or ktls (default: tls)
+#   MEASURE_LATENCY  - 1 to enable (default: 0)
+#   RUN_ID           - Run identifier (default: auto-generated)
+#   PRODUCER_TARGET  - host:port the producer sends to (default: consumer:9000)
+#   PRODUCER_PROTO   - tcp or udp (default: tcp)
+#   CONSUMER_PORT    - port the consumer listens on (default: 9000)
+
+services:
+  consumer:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_proxy_endpoint.sh
+    container_name: proxy_consumer
+    networks:
+      proxy_net:
+        ipv4_address: 172.30.0.10
+    privileged: true
+    environment:
+      - ROLE=consumer
+      - LISTEN_PORT=${CONSUMER_PORT:-9000}
+      - LISTEN_PROTO=${PRODUCER_PROTO:-tcp}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+    volumes:
+      - proxy_results:/results
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_proxy.sh
+    container_name: proxy_gateway
+    depends_on:
+      - consumer
+    networks:
+      proxy_net:
+        ipv4_address: 172.30.0.20
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+    environment:
+      - PIPE_MODE=${PIPE_MODE:-tls}
+      - GATEWAY_CONFIG=${GATEWAY_CONFIG:-/etc/gateway/gateway.toml}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+      - CONSUMER_HOST=172.30.0.10
+      - CONSUMER_PORT=${CONSUMER_PORT:-9000}
+      - LISTEN_PORT=${LISTEN_PORT:-9000}
+      - PRODUCER_PROTO=${PRODUCER_PROTO:-tcp}
+    volumes:
+      - proxy_results:/results
+
+  producer:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_proxy_producer.sh
+    container_name: proxy_producer
+    depends_on:
+      - gateway
+    networks:
+      proxy_net:
+        ipv4_address: 172.30.0.30
+    privileged: true
+    environment:
+      - TARGET_HOST=${PRODUCER_TARGET_HOST:-172.30.0.20}
+      - TARGET_PORT=${LISTEN_PORT:-9000}
+      - PROTO=${PRODUCER_PROTO:-tcp}
+      - MSG_SIZE=${MSG_SIZE:-1024}
+      - MSG_COUNT=${MSG_COUNT:-100000}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+    volumes:
+      - proxy_results:/results
+
+networks:
+  proxy_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  proxy_results:

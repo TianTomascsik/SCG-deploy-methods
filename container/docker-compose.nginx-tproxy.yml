@@ -1,0 +1,118 @@
+# SCG NGINX TPROXY Demo — True Transparent Proxy
+#
+# Demonstrates the SCG gateway transparently intercepting HTTP traffic using
+# iptables REDIRECT (TPROXY). A client container sends plain HTTP to the NGINX
+# IP address, completely unaware that an SCG encrypt gateway intercepts the
+# traffic, wraps it in TLS, and sends it to an SCG decrypt gateway which strips
+# TLS and forwards plain HTTP to NGINX.
+#
+# Architecture:
+#   [Client .30]                  [SCG-Encrypt .20]              [SCG-Decrypt .40]         [NGINX .10]
+#   curl http://172.31.0.10:80 → (ip route via .20) →           
+#                                 iptables REDIRECT :3128 →
+#                                 encrypt + TLS to .40:8443 →
+#                                                               decrypt TLS →
+#                                                               forward HTTP to .10:80 →  serves page
+#
+# The client sends plain HTTP but traffic is encrypted on the wire between
+# scg-encrypt and scg-decrypt. This is fully transparent to both client and server.
+#
+# Usage:
+#   docker compose -f container/docker-compose.nginx-tproxy.yml up --build
+#
+# Cleanup:
+#   docker compose -f container/docker-compose.nginx-tproxy.yml down
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: tproxy_nginx
+    networks:
+      tproxy_net:
+        ipv4_address: 172.31.0.10
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  scg-decrypt:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile.demo
+    entrypoint: /scripts/entrypoint_tproxy_decrypt.sh
+    container_name: tproxy_scg_decrypt
+    depends_on:
+      nginx:
+        condition: service_healthy
+    networks:
+      tproxy_net:
+        ipv4_address: 172.31.0.40
+    ports:
+      - "8443:8443"
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./entrypoint_tproxy_decrypt.sh:/scripts/entrypoint_tproxy_decrypt.sh:ro
+    environment:
+      - LISTEN_PORT=8443
+      - UPSTREAM_HOST=172.31.0.10
+      - UPSTREAM_PORT=80
+      - LOG_LEVEL=info
+
+  scg-encrypt:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile.demo
+    entrypoint: /scripts/entrypoint_tproxy_encrypt.sh
+    container_name: tproxy_scg_encrypt
+    depends_on:
+      - scg-decrypt
+    networks:
+      tproxy_net:
+        ipv4_address: 172.31.0.20
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    sysctls:
+      - net.ipv4.ip_forward=1
+    volumes:
+      - ./entrypoint_tproxy_encrypt.sh:/scripts/entrypoint_tproxy_encrypt.sh:ro
+    environment:
+      - LISTEN_PORT=3128
+      - DECRYPT_HOST=172.31.0.40
+      - DECRYPT_PORT=8443
+      - NGINX_IP=172.31.0.10
+      - NGINX_PORT=80
+      - LOG_LEVEL=info
+
+  client:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile.demo
+    entrypoint: /scripts/entrypoint_tproxy_client.sh
+    container_name: tproxy_client
+    depends_on:
+      - scg-encrypt
+    networks:
+      tproxy_net:
+        ipv4_address: 172.31.0.30
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - NGINX_IP=172.31.0.10
+      - NGINX_PORT=80
+      - GATEWAY_IP=172.31.0.20
+    volumes:
+      - ./entrypoint_tproxy_client.sh:/scripts/entrypoint_tproxy_client.sh:ro
+
+networks:
+  tproxy_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24

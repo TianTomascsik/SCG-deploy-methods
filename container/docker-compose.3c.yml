@@ -1,0 +1,124 @@
+# 3-Container Benchmark Setup
+# Container 1: Producer - sends traffic via IPC to consumer
+# Container 2: Consumer - receives IPC, pipes through TLS to receiver
+# Container 3: Receiver - accepts TLS, measures end-to-end latency
+#
+# This variant tests cross-container communication with TLS/kTLS piping.
+# TCP and UDP use the bench_net bridge network.
+# UDS uses a shared volume (uds_socket) for Unix domain socket files.
+# SHM uses a shareable IPC namespace so both containers access the same POSIX SHM.
+#
+# Usage:
+#   PROTOCOL=tcp VARIANT=raw docker compose -f container/docker-compose.3c.yml up --build
+#   PROTOCOL=uds VARIANT=raw docker compose -f container/docker-compose.3c.yml up --build
+#   PROTOCOL=shm VARIANT=ring docker compose -f container/docker-compose.3c.yml up --build
+#
+# Environment variables:
+#   PROTOCOL        - tcp, udp, uds, or shm (default: tcp)
+#   VARIANT         - raw, structured, ring, seg, seg_optimized (default: raw)
+#   PIPE_MODE       - none, tls, or ktls (default: tls)\n#                     none = receive & drop (no pipe to receiver)
+#   MEASURE_LATENCY - 1 to enable (default: 0)
+#   TCP_CORK        - 1 to enable TCP_CORK on pipe sockets (default: 0)
+
+services:
+  receiver:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_receiver.sh
+    container_name: bench_3c_receiver
+    networks:
+      bench_net:
+        aliases:
+          - receiver
+    privileged: true
+    environment:
+      - RECEIVER_PORT=${RECEIVER_PORT:-9443}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+      - EXPECTED_TESTS=${EXPECTED_TESTS:-0}
+    volumes:
+      - bench_results:/results
+
+  consumer:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_consumer.sh
+    container_name: bench_3c_consumer
+    depends_on:
+      - receiver
+    networks:
+      bench_net:
+        aliases:
+          - consumer
+    privileged: true
+    ipc: shareable
+    shm_size: 256m
+    environment:
+      - RECEIVER_HOST=receiver
+      - RECEIVER_PORT=${RECEIVER_PORT:-9443}
+      - PROTOCOL=${PROTOCOL:-tcp}
+      - VARIANT=${VARIANT:-raw}
+      - PIPE_MODE=${PIPE_MODE:-tls}
+      - KTLS_THREADS=${KTLS_THREADS:-1}
+      - TLS_THREADS=${TLS_THREADS:-1}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - INSTANCE=${INSTANCE:-0}
+      - TCP_CORK=${TCP_CORK:-0}
+      - SOCKET_DIR=/tmp/uds_shared
+    volumes:
+      - bench_results:/results
+      - uds_socket:/tmp/uds_shared
+
+  producer:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    container_name: bench_3c_producer
+    depends_on:
+      - consumer
+    networks:
+      - bench_net
+    privileged: true
+    ipc: "service:consumer"
+    entrypoint: >
+      /bin/bash -c "
+        echo 'Waiting for consumer to start...'
+        sleep 3
+        LATENCY_FLAG=''
+        if [ \"$$MEASURE_LATENCY\" = '1' ] || [ \"$$MEASURE_LATENCY\" = 'true' ]; then
+          LATENCY_FLAG='--latency'
+        fi
+        PROTO=\"$${PROTOCOL:-tcp}\"
+        VARI=\"$${VARIANT:-raw}\"
+        INST=\"$${INSTANCE:-0}\"
+        if [ \"$$PROTO\" = 'uds' ]; then
+          echo \"Starting producer: bench_uds client $$VARI --socket-dir /tmp/uds_shared\"
+          exec bench_uds client $$VARI --socket-dir /tmp/uds_shared --instance $$INST $$LATENCY_FLAG
+        elif [ \"$$PROTO\" = 'shm' ]; then
+          echo \"Starting producer: bench_shm client $$VARI\"
+          exec bench_shm client $$VARI --instance $$INST $$LATENCY_FLAG
+        else
+          echo \"Starting producer: bench_$$PROTO client $$VARI --server-addr consumer\"
+          exec bench_$$PROTO client $$VARI --server-addr consumer --instance $$INST $$LATENCY_FLAG
+        fi
+      "
+    environment:
+      - PROTOCOL=${PROTOCOL:-tcp}
+      - VARIANT=${VARIANT:-raw}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+      - INSTANCE=${INSTANCE:-0}
+    volumes:
+      - uds_socket:/tmp/uds_shared
+
+networks:
+  bench_net:
+    driver: bridge
+
+volumes:
+  bench_results:
+  uds_socket:

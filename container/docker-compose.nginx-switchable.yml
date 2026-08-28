@@ -1,0 +1,65 @@
+# SCG NGINX Switchable Demo — HTTP/HTTPS Toggle
+#
+# Demonstrates the SCG gateway as a toggleable TLS proxy in front of NGINX.
+# Access NGINX at http://localhost:8080 (gateway OFF) or https://localhost:8080 (gateway ON).
+# Toggle the gateway via the control panel at http://localhost:9090.
+#
+# Architecture:
+#   Browser → localhost:8080 → [socat passthrough OR SCG TLS] → NGINX:80
+#   Browser → localhost:9090 → Control Panel (toggle gateway on/off)
+#
+# Usage:
+#   docker compose -f container/docker-compose.nginx-switchable.yml up --build
+#
+# Then:
+#   1. Open http://localhost:8080 — see NGINX over HTTP
+#   2. Open http://localhost:9090 — see control panel
+#   3. Click "Enable HTTPS" — now https://localhost:8080 serves NGINX over TLS
+#   4. Click "Disable HTTPS" — back to http://localhost:8080
+#
+# Cleanup:
+#   docker compose -f container/docker-compose.nginx-switchable.yml down
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: switchable_nginx
+    networks:
+      switchable_net:
+        ipv4_address: 172.29.0.10
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile.switchable
+    container_name: switchable_gateway
+    depends_on:
+      nginx:
+        condition: service_healthy
+    networks:
+      switchable_net:
+        ipv4_address: 172.29.0.20
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      - NGINX_HOST=172.29.0.10
+      - NGINX_PORT=80
+      - LISTEN_PORT=8080
+      - CONTROL_PORT=9090
+
+networks:
+  switchable_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24

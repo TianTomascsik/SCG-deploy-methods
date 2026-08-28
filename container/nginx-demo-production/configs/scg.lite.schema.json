@@ -1,0 +1,460 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/scg/schema/scg.lite.schema.json",
+  "title": "SCG Lite Configuration Schema (implemented-feature subset)",
+  "description": "Trimmed subset of scg.schema.json covering only the features implemented by the SCG gateway today: TLS/kTLS/DTLS/routing crypto, ALE/RAW app protocols, protection modes full/integrity_only/routing_only, transparent/TPROXY interception, and loopback/UDS/shared-memory interfaces. Traffic classes are reduced to safety|normal to match the gateway scheduler. IPSEC/WireGuard/GDOI/multicast/http-proxy and the networking section are intentionally excluded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "gateway",
+    "defaults",
+    "runtime",
+    "apps",
+    "interfaces",
+    "crypto",
+    "security_policies",
+    "connections"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "gateway": {
+      "type": "object",
+      "required": [
+        "gateway_id",
+        "config_id"
+      ]
+    },
+    "defaults": {
+      "type": "object"
+    },
+    "runtime": {
+      "type": "object"
+    },
+    "apps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/app"
+      }
+    },
+    "interfaces": {
+      "type": "object"
+    },
+    "crypto": {
+      "$ref": "#/$defs/crypto"
+    },
+    "security_policies": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/security_policy"
+      }
+    },
+    "connections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/connection"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "protection_mode": {
+      "enum": [
+        "full",
+        "integrity_only",
+        "routing_only"
+      ]
+    },
+    "app": {
+      "type": "object",
+      "required": [
+        "app_id",
+        "name",
+        "allowed_interfaces",
+        "default_traffic_class"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "app_id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string"
+        },
+        "deployment": {
+          "type": "object"
+        },
+        "allowed_interfaces": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "loopback",
+              "uds",
+              "shared_memory"
+            ]
+          }
+        },
+        "default_traffic_class": {
+          "enum": [
+            "safety",
+            "normal"
+          ]
+        }
+      }
+    },
+    "crypto": {
+      "type": "object",
+      "required": [
+        "trust_stores",
+        "credentials",
+        "profiles"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "trust_stores": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "profiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/crypto_profile"
+          }
+        }
+      }
+    },
+    "crypto_profile": {
+      "type": "object",
+      "required": [
+        "profile_id",
+        "protocol",
+        "supported_protection_modes"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol": {
+          "enum": [
+            "TLS",
+            "TLS_PSK",
+            "DTLS",
+            "ALE",
+            "RAW",
+            "ABSTRACT_INTEGRITY_ONLY",
+            "NONE"
+          ]
+        },
+        "supported_protection_modes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/protection_mode"
+          }
+        }
+      }
+    },
+    "security_policy": {
+      "type": "object",
+      "required": [
+        "policy_id",
+        "traffic_classes",
+        "allowed_protection_modes",
+        "routing_only_allowed",
+        "audit_required"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "policy_id": {
+          "$ref": "#/$defs/id"
+        },
+        "traffic_classes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "safety",
+              "normal"
+            ]
+          }
+        },
+        "allowed_protection_modes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/protection_mode"
+          }
+        },
+        "routing_only_allowed": {
+          "type": "boolean"
+        },
+        "authentication_required": {
+          "type": "boolean"
+        },
+        "audit_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "required": [
+        "connection_id",
+        "enabled",
+        "app_id",
+        "traffic_class",
+        "application_protocol",
+        "transport",
+        "ingress",
+        "protection",
+        "paths",
+        "runtime_update"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "connection_id": {
+          "$ref": "#/$defs/id"
+        },
+        "connection_group_id": {
+          "$ref": "#/$defs/id"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "transparent": {
+          "type": "boolean"
+        },
+        "app_id": {
+          "$ref": "#/$defs/id"
+        },
+        "traffic_class": {
+          "enum": [
+            "safety",
+            "normal"
+          ]
+        },
+        "application_protocol": {
+          "enum": [
+            "raw_tcp",
+            "raw_udp"
+          ]
+        },
+        "transport": {
+          "type": "object"
+        },
+        "ingress": {
+          "$ref": "#/$defs/ingress"
+        },
+        "protection": {
+          "$ref": "#/$defs/protection"
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/path"
+          }
+        },
+        "runtime_update": {
+          "$ref": "#/$defs/runtime_update"
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "required": [
+        "interface_ref",
+        "endpoint"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "interface_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "endpoint": {
+          "type": "object"
+        }
+      }
+    },
+    "protection": {
+      "type": "object",
+      "required": [
+        "mode",
+        "profile_ref",
+        "policy_ref",
+        "role",
+        "credential_refs"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/protection_mode"
+        },
+        "profile_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "policy_ref": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "enum": [
+            "client",
+            "server",
+            "client_or_server",
+            "none"
+          ]
+        },
+        "credential_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    },
+    "path": {
+      "type": "object",
+      "required": [
+        "path_id",
+        "role",
+        "priority",
+        "egress",
+        "routing"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "path_id": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "enum": [
+            "primary",
+            "secondary",
+            "standby"
+          ]
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "egress": {
+          "$ref": "#/$defs/egress"
+        },
+        "routing": {
+          "$ref": "#/$defs/path_routing"
+        }
+      }
+    },
+    "egress": {
+      "type": "object",
+      "required": [
+        "endpoint",
+        "source"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "endpoint": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "auto"
+            }
+          ]
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "ip",
+            "port"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "ip": {
+              "anyOf": [
+                {
+                  "const": "auto"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "port": {
+              "oneOf": [
+                {
+                  "const": "auto"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65535
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "path_routing": {
+      "type": "object",
+      "required": [
+        "out_interface"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "out_interface": {
+          "type": "string"
+        }
+      }
+    },
+    "runtime_update": {
+      "type": "object",
+      "required": [
+        "mode",
+        "hot_reload_fields",
+        "restart_required_fields"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "mode": {
+          "enum": [
+            "hot_reload",
+            "drain_and_replace",
+            "restart_required"
+          ]
+        },
+        "hot_reload_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "restart_required_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

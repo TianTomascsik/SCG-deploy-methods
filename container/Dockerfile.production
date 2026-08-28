@@ -1,0 +1,79 @@
+# Production SCG Gateway Container
+# All configuration is externalized via volume mounts.
+#
+# Build context: Janus root (needs SCG/ and ale-frame/).
+#
+# Mount points:
+#   /etc/scg/config/    - scg.defaults.json, scg.user.json, *.sig files
+#   /etc/scg/trust/     - config-signing.pub.pem, CA bundles
+#   /etc/scg/certs/     - TLS certificates
+#   /etc/scg/private/   - TLS private keys
+#   /etc/scg/schema/    - scg.lite.schema.json (validation)
+#   /var/log/scg/       - Audit and operational logs
+#   /run/scg/           - Runtime sockets (management API, UDS endpoints)
+
+# Stage 1: Build the gateway binary
+FROM rust:1.89-bookworm AS builder
+
+RUN apt-get update && apt-get install -y \
+    libssl-dev \
+    pkg-config \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY SCG/ ./SCG/
+COPY ale-frame/ ./ale-frame/
+
+WORKDIR /build/SCG
+# --features dev: the entrypoint scripts generate an unsigned single-file
+# --config at runtime, which a default gateway build rejects (signed
+# --config-dir only; SCG-TRA #87). A hardened deployment should instead build
+# without `dev` and mount a signed --config-dir (see tproxy-host/ and
+# nginx-demo-production/ for signed config assets + resign.sh).
+RUN cargo build --release -p gateway --features dev
+
+# Stage 2: Minimal runtime image
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    ca-certificates \
+    iproute2 \
+    iptables \
+    kmod \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy gateway binary
+COPY --from=builder /build/SCG/target/release/gateway /usr/local/bin/gateway
+
+# Create directory structure for config mounts
+RUN mkdir -p \
+    /etc/scg/config \
+    /etc/scg/trust \
+    /etc/scg/certs \
+    /etc/scg/private \
+    /etc/scg/schema \
+    /var/log/scg \
+    /var/lib/scg/config-generations \
+    /run/scg/uds \
+    /dev/shm/scg
+
+# Declare volumes for all config/runtime mount points
+VOLUME ["/etc/scg/config"]
+VOLUME ["/etc/scg/trust"]
+VOLUME ["/etc/scg/certs"]
+VOLUME ["/etc/scg/private"]
+VOLUME ["/etc/scg/schema"]
+VOLUME ["/var/log/scg"]
+VOLUME ["/run/scg"]
+
+# Gateway needs NET_ADMIN for TPROXY/kTLS, NET_RAW for raw sockets
+# These are granted via docker-compose cap_add, not baked in.
+
+EXPOSE 8080
+EXPOSE 8443
+
+WORKDIR /app
+ENTRYPOINT ["gateway"]
+CMD ["--config-dir", "/etc/scg/config", "--watch"]

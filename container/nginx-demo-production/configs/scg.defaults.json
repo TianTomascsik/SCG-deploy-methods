@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "defaults": {
+    "connection": {
+      "enabled": true,
+      "transparent": false,
+      "logging": {
+        "log_connection_start": true,
+        "log_connection_stop": true,
+        "log_protection_mode": true,
+        "log_policy_decision": true
+      }
+    },
+    "protection": {
+      "default_mode": "full",
+      "reject_unsupported_mode": true
+    },
+    "performance": {
+      "profile": "balanced"
+    }
+  },
+  "runtime": {
+    "config_manager": {
+      "schema_path": "/etc/scg/config/scg.lite.schema.json",
+      "schema_sha256": "a96e22ab54949b22fa3fd3c86512a4669a6778068d2c2a0f26b98ad5b9b4e72c",
+      "generation_store": "/var/lib/scg/config-generations"
+    },
+    "config_signing": {
+      "algorithm": "ed25519",
+      "signature_suffix": ".sig"
+    },
+    "admin_api": {
+      "enabled": true,
+      "transport": "unix_domain_socket",
+      "address": "/run/scg/admin.sock"
+    }
+  },
+  "crypto": {
+    "profiles": [
+      {
+        "profile_id": "tls-server-default",
+        "protocol": "TLS",
+        "role": "server",
+        "min_version": "1.2",
+        "max_version": "1.3",
+        "authentication": {
+          "mode": "none"
+        }
+      }
+    ],
+    "credentials": []
+  },
+  "policy": {
+    "default_action": "allow",
+    "whitelist": []
+  }
+}

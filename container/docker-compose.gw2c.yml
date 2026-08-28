@@ -1,0 +1,73 @@
+# 2-Container Gateway Benchmark — Receiver-Decrypt
+# Container 1: Gateway - accepts TLS/kTLS, decrypts, measures throughput/latency
+# Container 2: Benchmark runner (sender) - sends data encrypted via TLS/kTLS to gateway
+#
+# The gateway container performs the decryption (receiver-side decrypt),
+# measuring decrypt throughput and latency.
+#
+# Usage:
+#   PIPE_MODE=tls docker compose -f container/docker-compose.gw2c.yml up --build
+#   PIPE_MODE=ktls docker compose -f container/docker-compose.gw2c.yml up --build
+#
+# Environment variables:
+#   BENCHMARKS      - Space-separated list (default: "tcp_raw udp_raw")
+#   PIPE_MODE       - tls or ktls — selects encryption on sender side (default: tls)
+#   DECRYPT_MODE    - tls or ktls — selects decryption mode on gateway (default: same as PIPE_MODE)
+#   MEASURE_LATENCY - 1 to enable (default: 0)
+#   RUN_ID          - Run identifier (default: auto-generated timestamp)
+
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_gateway.sh
+    container_name: bench_gw2c_gateway
+    networks:
+      bench_net:
+        aliases:
+          - gateway
+    privileged: true
+    environment:
+      - GATEWAY_PORT=${GATEWAY_PORT:-9443}
+      - DECRYPT_MODE=${DECRYPT_MODE:-${PIPE_MODE:-tls}}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+      - EXPECTED_TESTS=${EXPECTED_TESTS:-0}
+    volumes:
+      - bench_results:/results
+
+  benchmark:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_benchmark.sh
+    container_name: bench_gw2c_runner
+    depends_on:
+      - gateway
+    networks:
+      - bench_net
+    privileged: true
+    shm_size: 256m
+    environment:
+      - RECEIVER_HOST=gateway
+      - RECEIVER_PORT=${GATEWAY_PORT:-9443}
+      - BENCHMARKS=${BENCHMARKS:-tcp_raw udp_raw}
+      - PIPE_MODE=${PIPE_MODE:-tls}
+      - KTLS_THREADS=${KTLS_THREADS:-1}
+      - TLS_THREADS=${TLS_THREADS:-1}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - INSTANCE=${INSTANCE:-0}
+      - TCP_CORK=${TCP_CORK:-0}
+    volumes:
+      - bench_results:/results
+
+networks:
+  bench_net:
+    driver: bridge
+
+volumes:
+  bench_results:

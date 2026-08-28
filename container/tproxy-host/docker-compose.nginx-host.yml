@@ -1,0 +1,30 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: scg_tproxy_nginx_4200
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./demo/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./demo/html:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4200/ >/dev/null 2>&1 || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  scg-gateway:
+    build:
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/tproxy-host/Dockerfile
+    image: scg-gateway:latest
+    container_name: scg_tproxy_gateway
+    network_mode: host
+    depends_on:
+      nginx:
+        condition: service_healthy
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped

@@ -1,0 +1,49 @@
+{
+  "gateway": {
+    "gateway_id": "scg-nginx-demo",
+    "config_id": "nginx-https-proxy",
+    "environment": "demo"
+  },
+  "apps": [],
+  "connections": [
+    {
+      "connection_id": "conn-nginx-https",
+      "description": "TLS termination proxy for NGINX on port 8080",
+      "traffic_class": "normal",
+      "transparent": false,
+      "application_protocol": "raw_tcp",
+      "transport": {
+        "type": "stream",
+        "protocol": "tcp"
+      },
+      "protection": {
+        "role": "server",
+        "mode": "full",
+        "profile_ref": "tls-server-default"
+      },
+      "ingress": {
+        "endpoint": {
+          "ip": "0.0.0.0",
+          "port": 8443
+        },
+        "intercept": {
+          "mode": "ingress_redirect",
+          "in_interface": "eth0",
+          "match_dports": "8080"
+        }
+      },
+      "paths": [
+        {
+          "path_id": "path-nginx",
+          "priority": 0,
+          "egress": {
+            "endpoint": {
+              "host": "127.0.0.1",
+              "port": 80
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

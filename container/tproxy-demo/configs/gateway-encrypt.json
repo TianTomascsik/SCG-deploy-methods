@@ -1,0 +1,22 @@
+{
+  "log_level": "info",
+  "sock_buf_size": 16777216,
+  "rules": [
+    {
+      "name": "encrypt-outbound",
+      "direction": "encrypt",
+      "listen_addr": "0.0.0.0:3128",
+      "listen_proto": "tcp",
+      "upstream_addr": "auto",
+      "upstream_proto": "tcp",
+      "transparent": true,
+      "security_provider": "tls",
+      "protocol_version": "tls1.3",
+      "intercept": {
+        "mode": "egress_redirect",
+        "match_dports": "8080",
+        "match_dst": ["172.30.2.10"]
+      }
+    }
+  ]
+}

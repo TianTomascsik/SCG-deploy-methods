@@ -1,0 +1,58 @@
+# SCG Gateway — Production Deployment
+#
+# A standard SCG container with all config files mounted from the host.
+# Edit the config files in ./configs/ and restart the gateway to apply.
+#
+# Usage:
+#   docker compose -f container/docker-compose.production.yml up --build -d
+#
+# Config files (edit these):
+#   configs/scg.defaults.json     - Platform defaults (crypto profiles, rules)
+#   configs/scg.user.json         - Deployment config (gateway ID, connections)
+#   configs/trust/                - CA certs, signing keys
+#
+# Logs:
+#   ./logs/                       - Gateway audit and operational logs
+#
+# Ports:
+#   Configured in your scg.user.json rules (listen_addr fields).
+#   Add port mappings below as needed.
+
+services:
+  scg-gateway:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile.production
+    container_name: scg_gateway
+    restart: unless-stopped
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - NET_BIND_SERVICE
+    sysctls:
+      - net.ipv4.ip_forward=1
+    volumes:
+      # Configuration directory (contains scg.defaults.json, scg.user.json,
+      # their .sig files, and trust/ subdirectory with signing pubkey)
+      - ../../configs/:/etc/scg/config/:ro
+      # TLS certificates and private keys (mount your own)
+      - ./certs/:/etc/scg/certs/:ro
+      - ./private/:/etc/scg/private/:ro
+      # Runtime (logs, sockets)
+      - ./logs/:/var/log/scg/
+      - scg_runtime:/run/scg/
+    ports:
+      # Map ports based on your rule configuration.
+      # Example: if your config has a rule listening on 8443:
+      - "8443:8443"
+      - "8080:8080"
+    networks:
+      - scg_net
+
+networks:
+  scg_net:
+    driver: bridge
+
+volumes:
+  scg_runtime:

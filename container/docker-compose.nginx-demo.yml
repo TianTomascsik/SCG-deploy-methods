@@ -1,0 +1,64 @@
+# SCG NGINX Demo — Simple TLS Termination
+#
+# Demonstrates the SCG gateway acting as a TLS-terminating reverse proxy
+# in front of a standard NGINX container. The browser connects via HTTPS
+# and the gateway decrypts TLS before forwarding plain HTTP to NGINX.
+#
+# Architecture:
+#   Browser (https://localhost:8443)
+#       → SCG Gateway (decrypt rule, TLS terminate on :8443)
+#           → NGINX (plain HTTP on :80)
+#
+# Usage:
+#   docker compose -f container/docker-compose.nginx-demo.yml up --build
+#
+# Then open https://localhost:8443 in your browser (accept the self-signed cert warning).
+#
+# Cleanup:
+#   docker compose -f container/docker-compose.nginx-demo.yml down
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: demo_nginx
+    networks:
+      demo_net:
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  scg-gateway:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile.demo
+    entrypoint: /scripts/entrypoint_nginx_demo.sh
+    container_name: demo_scg_gateway
+    depends_on:
+      nginx:
+        condition: service_healthy
+    networks:
+      demo_net:
+        ipv4_address: 172.28.0.20
+    ports:
+      - "8443:8443"
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./entrypoint_nginx_demo.sh:/scripts/entrypoint_nginx_demo.sh:ro
+    environment:
+      - LISTEN_PORT=8443
+      - UPSTREAM_HOST=172.28.0.10
+      - UPSTREAM_PORT=80
+      - LOG_LEVEL=info
+
+networks:
+  demo_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

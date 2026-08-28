@@ -1,0 +1,55 @@
+# SCG NGINX Production Demo — HTTP/HTTPS via Gateway Start/Stop
+#
+# When the gateway container is running:  https://localhost:8080 (HTTPS, TLS enforced)
+# When the gateway container is stopped:  http://localhost:8080  (plain HTTP fallback)
+#
+# Usage:
+#   docker compose up -d               # Start everything (HTTPS mode)
+#   docker stop scg_nginx_gateway      # Switch to HTTP
+#   docker start scg_nginx_gateway     # Switch back to HTTPS
+#
+# Or use the helper:
+#   ./gateway.sh start     # HTTPS mode
+#   ./gateway.sh stop      # HTTP mode
+#   ./gateway.sh status    # Show current mode
+#
+# How it works:
+#   nginx and gateway share a network namespace (network_mode: service:nginx).
+#   nginx always listens on port 80 (internal) and port 8080 (public HTTP).
+#   When gateway starts, iptables redirects port 8080 → gateway (8443, TLS).
+#   When gateway stops, the iptables rule is cleaned up → nginx serves HTTP on 8080.
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  scg-gateway:
+    build:
+      context: ../../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile.production
+    container_name: scg_nginx_gateway
+    network_mode: "service:nginx"
+    depends_on:
+      nginx:
+        condition: service_healthy
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./configs/:/etc/scg/config/:ro
+      - ./entrypoint.sh:/app/entrypoint.sh:ro
+    entrypoint: ["/bin/bash", "/app/entrypoint.sh"]
+    restart: unless-stopped

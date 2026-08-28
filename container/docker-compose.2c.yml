@@ -1,0 +1,68 @@
+# 2-Container Benchmark Setup
+# Container 1: Benchmark runner (producer/consumer) - runs IPC benchmarks, pipes through TLS
+# Container 2: Receiver - accepts TLS connections, measures latency
+#
+# Usage:
+#   docker compose -f container/docker-compose.2c.yml up --build
+#
+# Environment variables (set in .env or override):
+#   BENCHMARKS     - Space-separated list (default: "tcp_raw udp_raw")
+#   PIPE_MODE      - none, tls, or ktls (default: tls)
+#                    none = receive & drop (no pipe to receiver)
+#   MEASURE_LATENCY - 1 to enable (default: 0)
+#   RUN_ID         - Run identifier (default: auto-generated timestamp)
+
+services:
+  receiver:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_receiver.sh
+    container_name: bench_receiver
+    networks:
+      bench_net:
+        aliases:
+          - receiver
+    privileged: true
+    environment:
+      - RECEIVER_PORT=${RECEIVER_PORT:-9443}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+      - EXPECTED_TESTS=${EXPECTED_TESTS:-0}
+    volumes:
+      - bench_results:/results
+
+  benchmark:
+    build:
+      context: ../..
+      dockerfile: SCG-deploy-methods/container/Dockerfile
+    entrypoint: /usr/local/bin/entrypoint_benchmark.sh
+    container_name: bench_runner
+    depends_on:
+      - receiver
+    networks:
+      - bench_net
+    privileged: true
+    shm_size: 256m
+    environment:
+      - RECEIVER_HOST=receiver
+      - RECEIVER_PORT=${RECEIVER_PORT:-9443}
+      - BENCHMARKS=${BENCHMARKS:-tcp_raw udp_raw}
+      - PIPE_MODE=${PIPE_MODE:-tls}
+      - KTLS_THREADS=${KTLS_THREADS:-1}
+      - TLS_THREADS=${TLS_THREADS:-1}
+      - MEASURE_LATENCY=${MEASURE_LATENCY:-0}
+      - LOG_DIR=/results
+      - RUN_ID=${RUN_ID:-}
+      - INSTANCE=${INSTANCE:-0}
+      - TCP_CORK=${TCP_CORK:-0}
+    volumes:
+      - bench_results:/results
+
+networks:
+  bench_net:
+    driver: bridge
+
+volumes:
+  bench_results:

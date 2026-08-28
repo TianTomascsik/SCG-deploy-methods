@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SCG TProxy Host Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f3ea;
+      --ink: #1b2421;
+      --accent: #0f7b6c;
+      --panel: #fffdf8;
+      --line: #d8d1c0;
+    }
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", serif;
+      background:
+        radial-gradient(circle at top left, rgba(15, 123, 108, 0.12), transparent 28rem),
+        linear-gradient(180deg, var(--bg), #efe7d5);
+      color: var(--ink);
+    }
+    main {
+      max-width: 42rem;
+      margin: 8vh auto;
+      padding: 2.5rem;
+      background: rgba(255, 253, 248, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 1.25rem;
+      box-shadow: 0 1rem 3rem rgba(27, 36, 33, 0.08);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: clamp(2rem, 5vw, 3.25rem);
+      line-height: 1;
+    }
+    p {
+      font-size: 1.05rem;
+      line-height: 1.65;
+    }
+    code {
+      padding: 0.15rem 0.4rem;
+      border-radius: 999px;
+      background: rgba(15, 123, 108, 0.08);
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SCG TProxy Host Demo</h1>
+    <p>This page is served by <code>nginx</code> on plain HTTP <code>127.0.0.1:4200</code>.</p>
+    <p>If you reached it at <code>https://localhost:4200</code>, the host-network SCG gateway intercepted the browser connection, upgraded it to TLS, and forwarded the decrypted stream back into the local backend.</p>
+  </main>
+</body>
+</html>

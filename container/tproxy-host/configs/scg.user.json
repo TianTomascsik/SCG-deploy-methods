@@ -1,0 +1,48 @@
+{
+  "gateway": {
+    "gateway_id": "scg-host-tproxy",
+    "config_id": "host-transparent-proxy",
+    "environment": "production"
+  },
+  "apps": [],
+  "connections": [
+    {
+      "connection_id": "secure-8085",
+      "description": "TLS termination for HTTP service on port 8085. External clients connect via HTTPS, gateway intercepts port 8085 and terminates TLS before forwarding plain HTTP to the backend.",
+      "traffic_class": "normal",
+      "transparent": false,
+      "application_protocol": "raw_tcp",
+      "transport": {
+        "type": "stream",
+        "protocol": "tcp"
+      },
+      "protection": {
+        "role": "server",
+        "mode": "full",
+        "profile_ref": "tls-server-default"
+      },
+      "ingress": {
+        "endpoint": {
+          "ip": "::",
+          "port": 8086
+        },
+        "intercept": {
+          "mode": "ingress_redirect",
+          "match_dports": "8085"
+        }
+      },
+      "paths": [
+        {
+          "path_id": "path-backend",
+          "priority": 0,
+          "egress": {
+            "endpoint": {
+              "host": "127.0.0.1",
+              "port": 8085
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

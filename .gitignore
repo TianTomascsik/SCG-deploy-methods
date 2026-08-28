@@ -1,0 +1,14 @@
+# Logs
+*.log
+
+# Build artifacts / exported images (rebuild from source; never commit)
+*.tar
+target/
+
+# Secrets — never commit signing keys
+*.key.pem
+signing.key.pem
+
+# Runtime state
+container/**/logs/
+container/**/private/
