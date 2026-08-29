@@ -14,10 +14,11 @@ Browser/app ──https://localhost:4200──→ [OUTPUT REDIRECT 4200→4201] 
 - Local clients connect to `https://localhost:4200`
 - iptables transparently redirects local traffic for `127.0.0.1:4200` to the
   gateway on port `4201` (intercept mode `egress_redirect`,
-  `match_dst: ["127.0.0.1"]`, `match_dports: "4200"`)
-- The gateway listens on `[::]:4201` (dual-stack, so traffic a browser sends
-  to `::1` is caught by the mirrored IPv6 redirect too), terminates TLS, and
-  forwards plain HTTP to `127.0.0.1:4200`
+  `match_dst: ["127.0.0.1"]`, `match_dports: "4200"`; the intercept installs
+  the `::1` mirror redirect as well)
+- The gateway listens on loopback only — `127.0.0.1:4201` (`secure-4200`) and
+  `[::1]:4201` (`secure-4200-v6`, terminating the mirrored IPv6 redirect) —
+  terminates TLS, and forwards plain HTTP to `127.0.0.1:4200`
 - Your application continues listening on port 4200 as before
 
 The shipped `configs/scg.user.json` declares exactly this flow as connection
@@ -74,7 +75,8 @@ Or use the helper:
 ./build.sh
 ```
 
-This produces `scg-gateway.tar` (~40 MB).
+This produces `scg-gateway.tar` (~40 MB as a compressed podman OCI archive;
+the uncompressed docker-archive variant is ~100 MB).
 
 | Variant | Command |
 |---|---|
@@ -303,7 +305,7 @@ shipped default; the second adds an 8080 service behind a TLS listener on
     {
       "connection_id": "secure-4200",
       "ingress": {
-        "endpoint": { "ip": "::", "port": 4201 },
+        "endpoint": { "ip": "127.0.0.1", "port": 4201 },
         "intercept": {
           "mode": "egress_redirect",
           "match_dports": "4200",

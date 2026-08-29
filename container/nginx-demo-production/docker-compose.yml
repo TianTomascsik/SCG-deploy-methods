@@ -19,6 +19,10 @@
 #   When gateway starts, iptables redirects port 8080 → gateway (8443, TLS).
 #   When gateway stops, the iptables rule is cleaned up → nginx serves HTTP on 8080.
 
+# Note: `gateway --config-dir ... --validate` reports this demo's TLS posture
+# as an error (decrypt listener without client certificates) — deliberate for a
+# browser-facing demo that must accept anonymous clients on a port-mapped
+# (non-loopback) listener. The gateway still starts and logs the warning.
 services:
   nginx:
     image: nginx:alpine

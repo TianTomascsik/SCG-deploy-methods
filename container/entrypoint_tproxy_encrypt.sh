@@ -49,6 +49,7 @@ cat > "$CONFIG_PATH" <<EOF
 {
   "log_level": "${LOG_LEVEL}",
   "sock_buf_size": 16777216,
+  "allow_unverified_transport": true,
   "policy": {
     "default_action": "allow",
     "whitelist": []
@@ -61,6 +62,7 @@ cat > "$CONFIG_PATH" <<EOF
       "listen_proto": "tcp",
       "upstream_addr": "${DECRYPT_HOST}:${DECRYPT_PORT}",
       "security_provider": "tls",
+      "verify": "none",
       "transparent": false,
       "protocol_version": "tls1.3",
       "priority": 0

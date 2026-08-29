@@ -45,7 +45,7 @@ Example:
 
 ```bash
 cd parent/
-docker build -f SCG-deploy-methods/container/Dockerfile .
+docker build -f SCG-deploy-methods/container/bench/Dockerfile .
 ```
 
 > **Note — bench topologies:** the benchmark topologies under

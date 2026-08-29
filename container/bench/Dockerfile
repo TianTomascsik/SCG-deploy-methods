@@ -28,6 +28,8 @@ COPY SCG-Interface-benchmarks/ ./SCG-Interface-benchmarks/
 # --config at runtime, which a default (production) gateway build rejects
 # (signed --config-dir only). A real production image should build
 # without `dev` and mount a signed --config-dir instead.
+# Redirect the private ale-frame git dependency to the copied sibling.
+RUN printf '\n[patch."https://github.com/TianTomascsik/ale-frame.git"]\nale-frame = { path = "../ale-frame" }\n' >> SCG/Cargo.toml
 RUN cargo build --release --manifest-path SCG/Cargo.toml -p gateway --features dev
 
 # bench_* micro-benchmarks from the SCG-Interface-benchmarks workspace

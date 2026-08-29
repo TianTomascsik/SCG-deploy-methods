@@ -24,6 +24,9 @@ WORKDIR /build/SCG
 # --features dev: the demo entrypoint generates an unsigned single-file --config
 # at runtime, which a default (production) gateway build rejects (signed
 # --config-dir only).
+# Redirect the private ale-frame git dependency to the sibling copied into the
+# build context — works offline and without GitHub credentials.
+RUN printf '\n[patch."https://github.com/TianTomascsik/ale-frame.git"]\nale-frame = { path = "../ale-frame" }\n' >> Cargo.toml
 RUN cargo build --release -p gateway --features dev
 
 # Stage 2: Runtime image

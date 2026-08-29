@@ -25,6 +25,9 @@ COPY SCG/ ./SCG/
 COPY ale-frame/ ./ale-frame/
 
 WORKDIR /build/SCG
+# Redirect the private ale-frame git dependency to the sibling copied into the
+# build context — works offline and without GitHub credentials.
+RUN printf '\n[patch."https://github.com/TianTomascsik/ale-frame.git"]\nale-frame = { path = "../ale-frame" }\n' >> Cargo.toml
 RUN cargo build --release -p gateway
 
 # Stage 2: Minimal runtime image

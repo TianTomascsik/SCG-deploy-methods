@@ -8,7 +8,7 @@
   "connections": [
     {
       "connection_id": "secure-4200",
-      "description": "Local-egress TLS interception for the HTTP service on port 4200. Local clients connect to https://localhost:4200; iptables redirects that traffic to the gateway listening on port 4201, which terminates TLS and forwards plain HTTP to the backend on 127.0.0.1:4200.",
+      "description": "Local-egress TLS interception for the HTTP service on port 4200. Local clients connect to https://localhost:4200; iptables redirects that traffic to the gateway listening on loopback port 4201 (the intercept also installs the ::1 mirror redirect, terminated by the secure-4200-v6 listener), which terminates TLS and forwards plain HTTP to the backend on 127.0.0.1:4200.",
       "traffic_class": "normal",
       "transparent": false,
       "application_protocol": "raw_tcp",
@@ -23,13 +23,49 @@
       },
       "ingress": {
         "endpoint": {
-          "ip": "::",
+          "ip": "127.0.0.1",
           "port": 4201
         },
         "intercept": {
           "mode": "egress_redirect",
           "match_dports": "4200",
-          "match_dst": ["127.0.0.1"]
+          "match_dst": [
+            "127.0.0.1"
+          ]
+        }
+      },
+      "paths": [
+        {
+          "path_id": "path-backend",
+          "priority": 0,
+          "egress": {
+            "endpoint": {
+              "host": "127.0.0.1",
+              "port": 4200
+            }
+          }
+        }
+      ]
+    },
+    {
+      "connection_id": "secure-4200-v6",
+      "description": "IPv6-loopback twin of secure-4200: terminates the ::1 traffic that the mirror redirect delivers to port 4201. No intercept of its own \u2014 secure-4200's intercept installs both address families' redirect rules.",
+      "traffic_class": "normal",
+      "transparent": false,
+      "application_protocol": "raw_tcp",
+      "transport": {
+        "type": "stream",
+        "protocol": "tcp"
+      },
+      "protection": {
+        "role": "server",
+        "mode": "full",
+        "profile_ref": "tls-server-default"
+      },
+      "ingress": {
+        "endpoint": {
+          "ip": "::1",
+          "port": 4201
         }
       },
       "paths": [
